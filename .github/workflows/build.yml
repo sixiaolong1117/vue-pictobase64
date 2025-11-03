@@ -1,0 +1,54 @@
+name: Build App
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        arch: [x64, arm64]
+        node: [20]
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      # 1️⃣ 检出代码
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2️⃣ 设置 Node.js 环境
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: 'yarn'
+
+      # 3️⃣ 安装依赖
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      # 4️⃣ 构建 Electron 应用
+      - name: Build Electron App
+        run: yarn electron:build --publish never
+        env:
+          # Electron Builder 需要这个变量来识别架构
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+          ELECTRON_BUILD_ARCH: ${{ matrix.arch }}
+
+      # 5️⃣ 上传构建产物
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: electron-${{ matrix.os }}-${{ matrix.arch }}
+          path: |
+            dist_electron/
+            dist/
