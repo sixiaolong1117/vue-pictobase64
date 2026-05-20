@@ -1,6 +1,6 @@
 {
   "name": "vue-pictobase64",
-  "version": "2.0.1",
+  "version": "2.1.1",
   "main": "electron/main.js",
   "type": "module",
   "scripts": {
@@ -40,7 +40,10 @@
       "category": "public.app-category.utilities"
     },
     "linux": {
-      "target": ["AppImage", "tar.gz"],
+      "target": [
+        "AppImage",
+        "tar.gz"
+      ],
       "category": "Utility"
     },
     "nsis": {
