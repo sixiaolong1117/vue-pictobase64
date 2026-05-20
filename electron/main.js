@@ -1,5 +1,6 @@
-import { app, shell, Tray, Menu, nativeImage, clipboard, BrowserWindow, ipcMain, dialog } from 'electron';
+import { app, shell, Tray, Menu, BrowserWindow, ipcMain, dialog } from 'electron';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import Store from 'electron-store';
 
@@ -13,6 +14,12 @@ const NODE_ENV = process.env.NODE_ENV;
 // 实例检查
 const gotTheLock = app.requestSingleInstanceLock();
 
+// Store key 白名单
+const VALID_STORE_KEYS = ['minimizeToTray', 'autoCopy', 'useMarkdown'];
+function isValidStoreKey(key) {
+  return VALID_STORE_KEYS.includes(key);
+}
+
 // 全局作用域
 let tray;
 let mainWindow;
@@ -22,26 +29,43 @@ function createWindow() {
   mainWindow = new BrowserWindow({
     width: 600,
     height: 600,
-    resizable: false,
+    minWidth: 400,
+    minHeight: 400,
+    resizable: true,
     frame: false, // 窗口框架
     transparent: true, // 窗口背景透明
     webPreferences: {
-      webSecurity: false, // 关闭网站安全检查
-      preload: path.join(__dirname, 'preload.js'),
-      nodeIntegration: true,
-      enableRemoteModule: true,
-      contextIsolation: false,
+      webSecurity: true,
+      preload: path.join(__dirname, 'preload.cjs'),
+      nodeIntegration: false,
+      contextIsolation: true,
+      sandbox: true,
     },
+  });
+
+  // 阻止主窗口导航到非应用地址
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    const parsedUrl = new URL(url);
+    const appUrl = NODE_ENV === 'development'
+      ? 'http://localhost:3000'
+      : 'file://';
+    if (!parsedUrl.href.startsWith(appUrl)) {
+      event.preventDefault();
+    }
+  });
+
+  // 外部链接用系统浏览器打开
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    shell.openExternal(url);
+    return { action: 'deny' };
   });
 
   // IPC 主进程事件
   ipcMain.on('closeFrame', () => {
-    console.log("关闭应用");
     app.quit();
   });
 
   ipcMain.on('minimizeToTray', () => {
-    console.log("最小化到托盘");
     mainWindow.hide();
   });
 
@@ -51,47 +75,95 @@ function createWindow() {
 
   // 获取存储内容
   ipcMain.handle('get-store', async (event, key) => {
+    if (!isValidStoreKey(key)) {
+      console.warn(`Store key "${key}" is not in whitelist`);
+      return null;
+    }
     try {
-      const value = store.get(key, false); // 添加默认值 false
-      if (value === undefined) {
-        console.warn(`Key "${key}" not found in store. Returning default value.`);
-      }
+      const value = store.get(key, false);
       return value;
     } catch (error) {
       console.error(`Error in get-store: ${error.message}`);
-      return false; // 出现错误时返回默认值 false
+      return false;
     }
   });
-
 
   // 设置存储内容
   ipcMain.handle('set-store', async (event, key, value) => {
+    if (!isValidStoreKey(key)) {
+      console.warn(`Store key "${key}" is not in whitelist`);
+      return false;
+    }
     try {
-      console.log(`Setting ${key} to ${value}`);
       store.set(key, value);
-      return true; // 成功
+      return true;
     } catch (error) {
       console.error(`Error in set-store: ${error.message}`);
-      return false; // 存储失败
+      return false;
     }
   });
 
-
   // 删除存储内容
   ipcMain.handle('delete-store', async (event, key) => {
+    if (!isValidStoreKey(key)) {
+      console.warn(`Store key "${key}" is not in whitelist`);
+      return false;
+    }
     try {
       const success = store.delete(key);
-      if (success) {
-        console.log(`Deleted key: ${key}`);
-        return true; // 删除成功
-      } else {
-        console.warn(`Key "${key}" not found to delete.`);
-        return false; // 删除失败
-      }
+      return !!success;
     } catch (error) {
       console.error(`Error in delete-store: ${error.message}`);
-      return false; // 删除失败
+      return false;
     }
+  });
+
+  // 读取本地图片文件并返回 data URL
+  ipcMain.handle('read-image-file', async (event, filePath) => {
+    try {
+      if (!filePath || typeof filePath !== 'string') {
+        return { error: '无效的文件路径' };
+      }
+
+      // 检查文件是否存在
+      if (!fs.existsSync(filePath)) {
+        return { error: '文件不存在' };
+      }
+
+      // 读取文件
+      const buffer = fs.readFileSync(filePath);
+
+      // 根据扩展名确定 MIME 类型
+      const ext = path.extname(filePath).toLowerCase();
+      const mimeMap = {
+        '.png': 'image/png',
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.gif': 'image/gif',
+        '.webp': 'image/webp',
+        '.bmp': 'image/bmp',
+        '.svg': 'image/svg+xml',
+        '.ico': 'image/x-icon',
+      };
+      const mimeType = mimeMap[ext] || 'image/png';
+
+      // 转为 base64 data URL
+      const base64 = buffer.toString('base64');
+      const dataUrl = `data:${mimeType};base64,${base64}`;
+
+      return { dataUrl, mimeType };
+    } catch (error) {
+      console.error(`Error reading image file: ${error.message}`);
+      return { error: error.message };
+    }
+  });
+
+  // 获取应用版本
+  ipcMain.handle('get-app-version', async () => {
+    return {
+      appVersion: app.getVersion(),
+      electronVersion: process.versions.electron,
+    };
   });
 
   // 加载 URL
@@ -159,9 +231,18 @@ if (!gotTheLock) {
           dialog
             .showOpenDialog({
               properties: ['openFile'],
+              filters: [
+                {
+                  name: '图片文件',
+                  extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'ico'],
+                },
+              ],
             })
             .then((data) => {
-              const filePath = data.filePaths.toString();
+              if (data.canceled || !data.filePaths || data.filePaths.length === 0) {
+                return;
+              }
+              const filePath = data.filePaths[0];
               mainWindow.webContents.send('openPicture', filePath);
             });
         },

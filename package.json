@@ -12,13 +12,13 @@
     "electron:build": "vite build && electron-builder"
   },
   "dependencies": {
+    "@element-plus/icons-vue": "^2.3.1",
     "@fortawesome/fontawesome-svg-core": "^6.7.2",
     "@fortawesome/free-brands-svg-icons": "^6.7.2",
     "@fortawesome/free-solid-svg-icons": "^6.7.2",
     "@fortawesome/vue-fontawesome": "^3.0.8",
     "electron-store": "^10.0.0",
     "element-plus": "^2.9.3",
-    "font-awesome": "^4.7.0",
     "vue": "^3.5.13"
   },
   "devDependencies": {
@@ -39,14 +39,17 @@
     "mac": {
       "category": "public.app-category.utilities"
     },
+    "linux": {
+      "target": ["AppImage", "tar.gz"],
+      "category": "Utility"
+    },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true
     },
     "files": [
       "dist/**/*",
-      "electron/**/*",
-      "src/**/*"
+      "electron/**/*"
     ],
     "extraFiles": [
       {

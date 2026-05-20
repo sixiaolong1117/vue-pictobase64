@@ -1,11 +1,27 @@
 <script setup>
-const { ipcRenderer } = require("electron");
-const version = process.versions.electron; // 获取 Electron 版本
-const appVersion = process.env.npm_package_version; // 获取应用程序的版本（假设通过 npm 启动）
 import { ref } from 'vue';
 
-console.log('Electron Version:', version);
-console.log('App Version:', appVersion);
+// 通过 preload 暴露的 API 获取版本信息
+const version = ref('');
+const appVersion = ref('');
+
+async function loadVersionInfo() {
+  const info = await window.electronAPI.invoke('get-app-version');
+  if (info) {
+    version.value = info.electronVersion || '';
+    appVersion.value = info.appVersion || '';
+  }
+}
+loadVersionInfo();
+
+// 有关 Store 的通信（通过 preload 白名单 API）
+async function getStoreValue(key) {
+  return await window.electronAPI.invoke('get-store', key);
+}
+
+async function setStoreValue(key, value) {
+  await window.electronAPI.invoke('set-store', key, value);
+}
 
 // 设置项变量
 const minimizeToTray = ref(false);
@@ -14,9 +30,9 @@ const useMarkdown = ref(false);
 
 // 初始化变量
 async function initializeSettings() {
-    minimizeToTray.value = await getStoreValue('minimizeToTray') ?? false;
-    autoCopy.value = await getStoreValue('autoCopy') ?? false;
-    useMarkdown.value = await getStoreValue('useMarkdown') ?? false;
+  minimizeToTray.value = (await getStoreValue('minimizeToTray')) ?? false;
+  autoCopy.value = (await getStoreValue('autoCopy')) ?? false;
+  useMarkdown.value = (await getStoreValue('useMarkdown')) ?? false;
 }
 
 // 调用初始化
@@ -24,82 +40,68 @@ initializeSettings();
 
 // 更新存储的函数
 function updateStore(key, value) {
-    setStoreValue(key, value);
-}
-
-// 有关 Store 的通信
-// 获取存储内容
-async function getStoreValue(key) {
-    const value = await ipcRenderer.invoke('get-store', key);
-    console.log(`Value for "${key}":`, value);
-    return value;
-}
-
-// 设置存储内容
-async function setStoreValue(key, value) {
-    const success = await ipcRenderer.invoke('set-store', key, value);
-    if (success) {
-        console.log(`Stored value: { ${key}: ${value} }`);
-    }
-}
-
-// 删除存储内容
-async function deleteStoreValue(key) {
-    const success = await ipcRenderer.invoke('delete-store', key);
-    if (success) {
-        console.log(`Deleted key: ${key}`);
-    }
+  setStoreValue(key, value);
 }
 
 // 关闭页面
 async function closeFrame() {
-    const minimizeToTray = await getStoreValue('minimizeToTray');
-    if (minimizeToTray === true) {
-        ipcRenderer.send("minimizeToTray");
-    } else {
-        ipcRenderer.send("closeFrame");
-    }
+  const minimizeToTrayValue = await getStoreValue('minimizeToTray');
+  if (minimizeToTrayValue === true) {
+    window.electronAPI.send('minimizeToTray');
+  } else {
+    window.electronAPI.send('closeFrame');
+  }
 }
 
 // 最小化窗口
 function minimizeFrame() {
-    ipcRenderer.send("minimizeFrame");
+  window.electronAPI.send('minimizeFrame');
 }
 
 // 打开设置 dialog
 const showSettingDialog = ref(false);
 function openSettings() {
-    showSettingDialog.value = true;
+  showSettingDialog.value = true;
 }
 
 // 打开关于 dialog
 const showAboutDialog = ref(false);
 function openAbout() {
-    showAboutDialog.value = true;
-    fetchContent();
+  showAboutDialog.value = true;
+  fetchContent();
 }
+
+// 赞助者列表缓存
+let sponsorsCache = null;
 
 // 获取赞助者列表
 const content = ref('');
-const loading = ref(true);  // 加载状态
-const error = ref('');  // 错误信息
+const loading = ref(true);
+const error = ref('');
 async function fetchContent() {
-    try {
-        const response = await fetch('https://raw.githubusercontent.com/SIXiaolong1117/SIXiaolong1117/main/README/Sponsor/List');
+  // 如果已有缓存，直接使用
+  if (sponsorsCache !== null) {
+    content.value = sponsorsCache;
+    loading.value = false;
+    return;
+  }
 
-        if (!response.ok) {
-            throw new Error('文件加载失败');
-        }
+  try {
+    const response = await fetch('https://raw.githubusercontent.com/SIXiaolong1117/SIXiaolong1117/main/README/Sponsor/List');
 
-        const text = await response.text();
-        content.value = text;
-    } catch (err) {
-        error.value = err.message;
-    } finally {
-        loading.value = false;
+    if (!response.ok) {
+      throw new Error('文件加载失败');
     }
-}
 
+    const text = await response.text();
+    content.value = text;
+    sponsorsCache = text; // 缓存结果
+  } catch (err) {
+    error.value = err.message;
+  } finally {
+    loading.value = false;
+  }
+}
 </script>
 
 <template>
@@ -107,16 +109,16 @@ async function fetchContent() {
     <div id="title-bar">
         <div class="title"><b>ℙ𝕚𝕔 𝕋𝕠 𝔹𝕒𝕤𝕖𝟞𝟜</b></div>
         <div class="bar">
-            <el-button class="bar-button" id="mini-button" name="mini" v-on:click="openAbout()">
+            <el-button class="bar-button mini-button" @click="openAbout()">
                 <font-awesome-icon :icon="['fas', 'circle-exclamation']" size="1x" />
             </el-button>
-            <el-button class="bar-button" id="mini-button" name="mini" v-on:click="openSettings()">
+            <el-button class="bar-button mini-button" @click="openSettings()">
                 <font-awesome-icon :icon="['fas', 'gear']" size="1x" />
             </el-button>
-            <el-button class="bar-button" id="mini-button" name="mini" v-on:click="minimizeFrame()">
+            <el-button class="bar-button mini-button" @click="minimizeFrame()">
                 <font-awesome-icon :icon="['fas', 'minus']" size="1x" />
             </el-button>
-            <el-button class="bar-button" id="close-button" name="close" v-on:click="closeFrame()">
+            <el-button class="bar-button close-button" @click="closeFrame()">
                 <font-awesome-icon :icon="['fas', 'xmark']" size="1x" />
             </el-button>
         </div>
@@ -145,7 +147,9 @@ async function fetchContent() {
                     <div id="sponsors" class="dialog-header-text"><b>赞助者</b></div>
                     <div id="sponsors-list">
                         <el-scrollbar height="100px">
-                            <pre id="sponsors-list-content">{{ content }}</pre>
+                            <div v-if="loading" class="loading-text">加载中...</div>
+                            <div v-else-if="error" class="error-text">{{ error }}</div>
+                            <pre v-else id="sponsors-list-content">{{ content }}</pre>
                         </el-scrollbar>
                         <div id="payment">
                             <a class="dialog-inner-text"
@@ -227,8 +231,6 @@ async function fetchContent() {
 .dialog-back {
     height: 380px;
     padding: 1em;
-    /* backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px); */
     background-color: rgba(0, 0, 0, 0);
     border-radius: 8px;
 }
@@ -342,6 +344,18 @@ a:hover {
     color: rgba(255, 255, 255, 0.5);
 }
 
+.loading-text,
+.error-text {
+    color: #ffffff;
+    text-align: center;
+    padding: 1em;
+    font-size: 14px;
+}
+
+.error-text {
+    color: #ff4949;
+}
+
 .title {
     color: #ffffff;
     margin-left: .5em;
@@ -372,18 +386,18 @@ a:hover {
     border-color: #ffffff00 !important;
 }
 
-#close-button,
-#mini-button {
+.close-button,
+.mini-button {
     -webkit-app-region: no-drag;
     margin: 0;
 }
 
-#close-button:hover {
+.close-button:hover {
     background-color: #c42b1c;
     color: white;
 }
 
-#mini-button:hover {
+.mini-button:hover {
     background-color: hsla(0, 0%, 0%, 0.5);
     color: white;
 }

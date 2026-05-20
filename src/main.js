@@ -11,9 +11,11 @@ import { library } from '@fortawesome/fontawesome-svg-core';
 import { fab } from '@fortawesome/free-brands-svg-icons';
 import { fas } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome';
+// 按需导入常用图标，减少包体积
+import { faCircleExclamation, faGear, faMinus, faXmark } from '@fortawesome/free-solid-svg-icons';
 
-library.add(fab);
-library.add(fas);
+library.add(fab, fas);
+library.add(faCircleExclamation, faGear, faMinus, faXmark);
 
 const app = createApp(App)
 
