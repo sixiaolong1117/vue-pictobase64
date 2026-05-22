@@ -20,6 +20,7 @@ const ALLOWED_SEND_CHANNELS = [
   'closeFrame',
   'minimizeToTray',
   'minimizeFrame',
+  'pasteClipboard',
 ];
 
 // 可查询的 Store key 白名单
@@ -55,6 +56,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       }
       case 'read-image-file':
         return ipcRenderer.invoke(channel, args[0]);
+      case 'read-clipboard-image-file':
+        return ipcRenderer.invoke(channel);
       case 'get-app-version':
         return ipcRenderer.invoke(channel);
       default:

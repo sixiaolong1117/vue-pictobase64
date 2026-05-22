@@ -87,7 +87,7 @@ async function fetchContent() {
   }
 
   try {
-    const response = await fetch('https://raw.githubusercontent.com/SIXiaolong1117/SIXiaolong1117/main/README/Sponsor/List');
+    const response = await fetch('https://raw.githubusercontent.com/sixiaolong1117/SIXiaolong1117/main/README/Sponsor/List');
 
     if (!response.ok) {
       throw new Error('文件加载失败');
@@ -134,13 +134,13 @@ async function fetchContent() {
                     <div id="sixiaolong">© 2022 司晓龙, 使用 MIT License.</div>
                     <div id="related-links">
                         <a class="dialog-inner-text"
-                            href="https://raw.githubusercontent.com/SIXiaolong1117/vue-pictobase64/refs/heads/main/PRIVACY"
+                            href="https://raw.githubusercontent.com/sixiaolong1117/vue-pictobase64/refs/heads/main/PRIVACY"
                             target="_blank">隐私政策</a>
-                        <a class="dialog-inner-text" href="https://github.com/SIXiaolong1117/vue-pictobase64/issues"
+                        <a class="dialog-inner-text" href="https://github.com/sixiaolong1117/vue-pictobase64/issues"
                             target="_blank">反馈问题</a>
-                        <a class="dialog-inner-text" href="https://github.com/SIXiaolong1117/vue-pictobase64"
+                        <a class="dialog-inner-text" href="https://github.com/sixiaolong1117/vue-pictobase64"
                             target="_blank">开源仓库</a>
-                        <a href="https://raw.githubusercontent.com/SIXiaolong1117/vue-pictobase64/refs/heads/main/LICENSE"
+                        <a href="https://raw.githubusercontent.com/sixiaolong1117/vue-pictobase64/refs/heads/main/LICENSE"
                             target="_blank">MIT License</a>
                     </div>
 
@@ -153,9 +153,9 @@ async function fetchContent() {
                         </el-scrollbar>
                         <div id="payment">
                             <a class="dialog-inner-text"
-                                href="https://raw.githubusercontent.com/SIXiaolong1117/SIXiaolong1117/refs/heads/main/README/Sponsor/AliPay.jpg"
+                                href="https://raw.githubusercontent.com/sixiaolong1117/SIXiaolong1117/refs/heads/main/README/Sponsor/AliPay.jpg"
                                 target="_blank">支付宝</a>
-                            <a href="https://raw.githubusercontent.com/SIXiaolong1117/SIXiaolong1117/refs/heads/main/README/Sponsor/WeChat.png"
+                            <a href="https://raw.githubusercontent.com/sixiaolong1117/SIXiaolong1117/refs/heads/main/README/Sponsor/WeChat.png"
                                 target="_blank">微信</a>
                         </div>
                     </div>

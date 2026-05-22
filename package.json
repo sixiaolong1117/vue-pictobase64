@@ -1,6 +1,8 @@
 {
   "name": "vue-pictobase64",
   "version": "2.1.1",
+  "description": "Pic to Base64 desktop client built with Vue and Electron.",
+  "author": "SI Xiaolong",
   "main": "electron/main.js",
   "type": "module",
   "scripts": {
@@ -9,7 +11,8 @@
     "serve": "vite preview",
     "electron": "wait-on tcp:3000 && cross-env NODE_ENV=development electron .",
     "electron:serve": "concurrently -k \"yarn dev\" \"yarn electron\"",
-    "electron:build": "vite build && electron-builder"
+    "electron:build": "vite build && electron-builder",
+    "electron:build:msix": "vite build && electron-builder --win appx --x64 --publish never"
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.1",
@@ -35,6 +38,19 @@
     "productName": "VuePicToBase64",
     "win": {
       "icon": "icon/icon.ico"
+    },
+    "appx": {
+      "artifactName": "${productName}-${version}-${arch}.msix",
+      "identityName": "53093SIXiaolong.Base64PictoBase64",
+      "applicationId": "VuePicToBase64",
+      "displayName": "图片转Base64（Pic to Base64）",
+      "publisher": "CN=C2E30F83-9FC0-4E81-A5EE-358CB57A431B",
+      "publisherDisplayName": "SI Xiaolong",
+      "backgroundColor": "#ffffff",
+      "languages": [
+        "zh-CN",
+        "en-US"
+      ]
     },
     "mac": {
       "category": "public.app-category.utilities"

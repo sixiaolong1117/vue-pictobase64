@@ -1,4 +1,4 @@
-import { app, shell, Tray, Menu, BrowserWindow, ipcMain, dialog } from 'electron';
+import { app, shell, Tray, Menu, BrowserWindow, ipcMain, dialog, clipboard } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
@@ -18,6 +18,139 @@ const gotTheLock = app.requestSingleInstanceLock();
 const VALID_STORE_KEYS = ['minimizeToTray', 'autoCopy', 'useMarkdown'];
 function isValidStoreKey(key) {
   return VALID_STORE_KEYS.includes(key);
+}
+
+const IMAGE_MIME_MAP = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.bmp': 'image/bmp',
+  '.svg': 'image/svg+xml',
+  '.ico': 'image/x-icon',
+};
+
+function getImageMimeType(filePath) {
+  return IMAGE_MIME_MAP[path.extname(filePath).toLowerCase()] || null;
+}
+
+function readImageFileAsDataUrl(filePath) {
+  const normalizedFilePath = normalizeClipboardPath(filePath);
+  if (!normalizedFilePath) {
+    return { error: '无效的文件路径' };
+  }
+
+  if (!fs.existsSync(normalizedFilePath)) {
+    return { error: '文件不存在' };
+  }
+
+  const stat = fs.statSync(normalizedFilePath);
+  if (!stat.isFile()) {
+    return { error: '路径不是文件' };
+  }
+
+  const mimeType = getImageMimeType(normalizedFilePath);
+  if (!mimeType) {
+    return { error: '剪贴板中的文件不是支持的图片格式' };
+  }
+
+  const buffer = fs.readFileSync(normalizedFilePath);
+  const base64 = buffer.toString('base64');
+
+  return {
+    dataUrl: `data:${mimeType};base64,${base64}`,
+    fileName: path.basename(normalizedFilePath),
+    filePath: normalizedFilePath,
+    mimeType,
+    size: stat.size,
+  };
+}
+
+function normalizeClipboardPath(value) {
+  if (!value || typeof value !== 'string') {
+    return null;
+  }
+
+  let filePath = value.trim();
+  if (!filePath || filePath === 'copy' || filePath === 'cut' || filePath.startsWith('#')) {
+    return null;
+  }
+
+  filePath = filePath.replace(/^["']|["']$/g, '');
+
+  if (filePath.toLowerCase().startsWith('file://')) {
+    try {
+      filePath = fileURLToPath(filePath);
+    } catch (error) {
+      return null;
+    }
+  }
+
+  return filePath;
+}
+
+function extractClipboardPathsFromText(text) {
+  if (!text || typeof text !== 'string') {
+    return [];
+  }
+
+  return text
+    .split(/\r?\n|\0/)
+    .map(normalizeClipboardPath)
+    .filter(Boolean);
+}
+
+function extractClipboardPathsFromBuffer(format) {
+  try {
+    const buffer = clipboard.readBuffer(format);
+    if (!buffer || buffer.length === 0) {
+      return [];
+    }
+
+    const lowerFormat = format.toLowerCase();
+    const encoding = lowerFormat.includes('filenamew') ? 'utf16le' : 'utf8';
+    return extractClipboardPathsFromText(buffer.toString(encoding));
+  } catch (error) {
+    console.warn(`Unable to read clipboard format "${format}": ${error.message}`);
+    return [];
+  }
+}
+
+function getClipboardFilePaths() {
+  const formats = clipboard.availableFormats();
+  const paths = [];
+
+  formats.forEach((format) => {
+    const lowerFormat = format.toLowerCase();
+    if (
+      lowerFormat === 'filenamew'
+      || lowerFormat === 'filename'
+      || lowerFormat.includes('file-url')
+      || lowerFormat.includes('uri-list')
+      || lowerFormat.includes('gnome-copied-files')
+    ) {
+      paths.push(...extractClipboardPathsFromBuffer(format));
+    }
+  });
+
+  paths.push(...extractClipboardPathsFromText(clipboard.readText()));
+
+  return [...new Set(paths)];
+}
+
+function findClipboardImageFilePath() {
+  return getClipboardFilePaths().find((filePath) => {
+    if (!getImageMimeType(filePath)) {
+      return false;
+    }
+
+    try {
+      return fs.existsSync(filePath) && fs.statSync(filePath).isFile();
+    } catch (error) {
+      return false;
+    }
+  });
 }
 
 // 全局作用域
@@ -73,6 +206,10 @@ function createWindow() {
     mainWindow.minimize();
   });
 
+  ipcMain.on('pasteClipboard', () => {
+    mainWindow.webContents.paste();
+  });
+
   // 获取存储内容
   ipcMain.handle('get-store', async (event, key) => {
     if (!isValidStoreKey(key)) {
@@ -121,39 +258,24 @@ function createWindow() {
   // 读取本地图片文件并返回 data URL
   ipcMain.handle('read-image-file', async (event, filePath) => {
     try {
-      if (!filePath || typeof filePath !== 'string') {
-        return { error: '无效的文件路径' };
-      }
-
-      // 检查文件是否存在
-      if (!fs.existsSync(filePath)) {
-        return { error: '文件不存在' };
-      }
-
-      // 读取文件
-      const buffer = fs.readFileSync(filePath);
-
-      // 根据扩展名确定 MIME 类型
-      const ext = path.extname(filePath).toLowerCase();
-      const mimeMap = {
-        '.png': 'image/png',
-        '.jpg': 'image/jpeg',
-        '.jpeg': 'image/jpeg',
-        '.gif': 'image/gif',
-        '.webp': 'image/webp',
-        '.bmp': 'image/bmp',
-        '.svg': 'image/svg+xml',
-        '.ico': 'image/x-icon',
-      };
-      const mimeType = mimeMap[ext] || 'image/png';
-
-      // 转为 base64 data URL
-      const base64 = buffer.toString('base64');
-      const dataUrl = `data:${mimeType};base64,${base64}`;
-
-      return { dataUrl, mimeType };
+      return readImageFileAsDataUrl(filePath);
     } catch (error) {
       console.error(`Error reading image file: ${error.message}`);
+      return { error: error.message };
+    }
+  });
+
+  // 读取系统剪贴板中的图片文件路径并返回 data URL
+  ipcMain.handle('read-clipboard-image-file', async () => {
+    try {
+      const filePath = findClipboardImageFilePath();
+      if (!filePath) {
+        return { empty: true };
+      }
+
+      return readImageFileAsDataUrl(filePath);
+    } catch (error) {
+      console.error(`Error reading clipboard image file: ${error.message}`);
       return { error: error.message };
     }
   });

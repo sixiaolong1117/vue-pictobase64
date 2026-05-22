@@ -1,31 +1,188 @@
 <script setup>
-import { ref, nextTick } from 'vue'
+import { ref, onBeforeUnmount, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 
 const base64code = ref('')
 const copiedRef = ref(false)
 const previewSrc = ref('')
 const fileInputRef = ref(null)
+const clipboardPasteTargetRef = ref(null)
+let clipboardPasteTimer = null
+let clipboardPasteRequested = false
 
 // 文件大小上限：10MB
 const MAX_FILE_SIZE = 10 * 1024 * 1024
+const IMAGE_FILE_EXTENSION_PATTERN = /\.(png|jpe?g|gif|webp|bmp|svg|ico)$/i
 
 // 监听主进程发送的事件（通过 preload API）
 window.electronAPI.on('openPicture', async (filePath) => {
-  const result = await window.electronAPI.invoke('read-image-file', filePath)
-  if (result.error) {
-    ElMessage.error('读取图片失败：' + result.error)
-    return
-  }
-  const blob = await fetch(result.dataUrl).then(res => res.blob())
-  const fileName = filePath.split(/[/\\]/).pop() || 'image'
-  const file = new File([blob], fileName, { type: result.mimeType })
-  processImageFile(file)
+  await loadImageFilePath(filePath)
+})
+
+onMounted(() => {
+  window.addEventListener('paste', handlePaste)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('paste', handlePaste)
+  clearClipboardPasteTimer()
 })
 
 // 有关 Store 的通信（通过 preload 白名单 API）
 async function getStoreValue(key) {
   return await window.electronAPI.invoke('get-store', key)
+}
+
+async function applyImageDataUrl(dataUrl) {
+  previewSrc.value = dataUrl
+  base64code.value = dataUrl
+
+  const autoCopy = await getStoreValue('autoCopy')
+  if (autoCopy === true) {
+    copyCode()
+  }
+}
+
+function showImageFileSizeWarning(size) {
+  const sizeMB = (size / (1024 * 1024)).toFixed(1)
+  ElMessage.warning(`文件大小 ${sizeMB}MB 超过 10MB 上限，请选择更小的图片`)
+}
+
+function clearClipboardPasteTimer() {
+  if (clipboardPasteTimer) {
+    clearTimeout(clipboardPasteTimer)
+    clipboardPasteTimer = null
+  }
+}
+
+function markClipboardPasteHandled() {
+  clearClipboardPasteTimer()
+  clipboardPasteRequested = false
+  clipboardPasteTargetRef.value?.blur()
+}
+
+function requestNativeClipboardPaste(fallbackMessage = '剪贴板中没有图片内容或图片文件') {
+  clearClipboardPasteTimer()
+  clipboardPasteRequested = true
+  clipboardPasteTargetRef.value?.focus()
+  window.electronAPI.send('pasteClipboard')
+
+  clipboardPasteTimer = setTimeout(() => {
+    clipboardPasteTimer = null
+    clipboardPasteRequested = false
+    clipboardPasteTargetRef.value?.blur()
+    ElMessage.warning(fallbackMessage)
+  }, 800)
+}
+
+async function loadImageFilePath(filePath, errorPrefix = '读取图片失败') {
+  const result = await window.electronAPI.invoke('read-image-file', filePath)
+  if (result.error) {
+    ElMessage.error(`${errorPrefix}：${result.error}`)
+    return false
+  }
+
+  if (result.size > MAX_FILE_SIZE) {
+    showImageFileSizeWarning(result.size)
+    return true
+  }
+
+  await applyImageDataUrl(result.dataUrl)
+  return true
+}
+
+function isSupportedImageFile(file) {
+  if (!file) {
+    return false
+  }
+
+  const fileName = file.name || file.path || ''
+  return file.type?.startsWith('image/') || IMAGE_FILE_EXTENSION_PATTERN.test(fileName)
+}
+
+function getImageFileFromFileList(fileList) {
+  return Array
+    .from(fileList || [])
+    .find(file => isSupportedImageFile(file))
+}
+
+function getImageFileFromDataTransferItems(items) {
+  return Array
+    .from(items || [])
+    .filter(item => item.kind === 'file')
+    .map(item => item.getAsFile())
+    .find(file => isSupportedImageFile(file))
+}
+
+function getImagePathFromClipboardText(text) {
+  if (!text) {
+    return ''
+  }
+
+  return text
+    .split(/\r?\n/)
+    .map(item => item.trim().replace(/^["']|["']$/g, ''))
+    .find((item) => {
+      if (!item || !IMAGE_FILE_EXTENSION_PATTERN.test(item)) {
+        return false
+      }
+
+      return item.toLowerCase().startsWith('file://')
+        || /^[a-zA-Z]:[\\/]/.test(item)
+        || item.startsWith('\\\\')
+        || item.startsWith('/')
+    }) || ''
+}
+
+async function readClipboardImageFile(showError = true) {
+  const result = await window.electronAPI.invoke('read-clipboard-image-file')
+  if (!result || result.empty) {
+    return false
+  }
+
+  if (result.error) {
+    if (showError) {
+      ElMessage.error('读取剪贴板图片失败：' + result.error)
+    }
+    return true
+  }
+
+  if (result.size > MAX_FILE_SIZE) {
+    showImageFileSizeWarning(result.size)
+    return true
+  }
+
+  await applyImageDataUrl(result.dataUrl)
+  return true
+}
+
+async function handlePaste(event) {
+  const isRequestedClipboardPaste = clipboardPasteRequested
+  const file = getImageFileFromFileList(event.clipboardData?.files)
+    || getImageFileFromDataTransferItems(event.clipboardData?.items)
+  if (file) {
+    event.preventDefault()
+    markClipboardPasteHandled()
+    processImageFile(file)
+    return
+  }
+
+  const filePath = getImagePathFromClipboardText(event.clipboardData?.getData('text/plain'))
+  if (filePath) {
+    event.preventDefault()
+    markClipboardPasteHandled()
+    await loadImageFilePath(filePath)
+    return
+  }
+
+  if (isRequestedClipboardPaste) {
+    event.preventDefault()
+  }
+
+  const fileHandled = await readClipboardImageFile(false)
+  if (fileHandled) {
+    markClipboardPasteHandled()
+  }
 }
 
 // el-button 打开图片按钮
@@ -44,15 +201,14 @@ function triggerFile(event) {
 // 处理图片文件（统一入口）
 function processImageFile(file) {
   // 类型判断
-  if (!file.type.startsWith('image/')) {
+  if (!isSupportedImageFile(file)) {
     ElMessage.warning('请确保文件为图像类型')
     return
   }
 
   // 大小检查
   if (file.size > MAX_FILE_SIZE) {
-    const sizeMB = (file.size / (1024 * 1024)).toFixed(1)
-    ElMessage.warning(`文件大小 ${sizeMB}MB 超过 10MB 上限，请选择更小的图片`)
+    showImageFileSizeWarning(file.size)
     return
   }
 
@@ -60,13 +216,16 @@ function processImageFile(file) {
   const reader = new FileReader()
 
   reader.addEventListener('load', async function () {
-    previewSrc.value = this.result
-    base64code.value = this.result
+    await applyImageDataUrl(this.result)
+  }, false)
 
-    const autoCopy = await getStoreValue('autoCopy')
-    if (autoCopy === true) {
-      copyCode()
+  reader.addEventListener('error', async function () {
+    if (file.path) {
+      await loadImageFilePath(file.path)
+      return
     }
+
+    ElMessage.error('读取图片失败，请重试')
   }, false)
 
   // 以 Base64 编码渲染图像
@@ -75,6 +234,8 @@ function processImageFile(file) {
 
 // 从剪贴板读取并解析图像为 Base64
 async function readClipboard() {
+  let clipboardReadError = null
+
   try {
     const items = await navigator.clipboard.read()
     for (const item of items) {
@@ -82,27 +243,25 @@ async function readClipboard() {
       const imageType = item.types.find(type => type.startsWith('image/'))
       if (imageType) {
         const blob = await item.getType(imageType)
-        const reader = new FileReader()
-
-        reader.onloadend = async function () {
-          base64code.value = reader.result
-          previewSrc.value = reader.result
-
-          const autoCopy = await getStoreValue('autoCopy')
-          if (autoCopy === true) {
-            copyCode()
-          }
-        }
-
-        reader.readAsDataURL(blob)
+        const file = new File([blob], 'clipboard-image', { type: imageType })
+        processImageFile(file)
         return
       }
     }
-    // 没有找到图片
-    ElMessage.warning('剪贴板中没有图片内容')
   } catch (error) {
     console.error('读取剪贴板失败:', error)
-    ElMessage.error('无法读取剪贴板内容')
+    clipboardReadError = error
+  }
+
+  const fileHandled = await readClipboardImageFile(false)
+  if (fileHandled) {
+    return
+  }
+
+  if (clipboardReadError) {
+    requestNativeClipboardPaste('无法读取剪贴板内容')
+  } else {
+    requestNativeClipboardPaste()
   }
 }
 
@@ -197,6 +356,7 @@ function handleDragOver(event) {
             <el-button class="action-button" @click="initWindow()" round>清空内容</el-button>
             <input type="file" ref="fileInputRef" @change="triggerFile($event)" style="display:none"
                 accept="image/*" />
+            <textarea ref="clipboardPasteTargetRef" class="clipboard-paste-target" aria-hidden="true"></textarea>
         </nav>
 
         <div v-if="copiedRef" class="copy-success-message">
@@ -216,6 +376,16 @@ function handleDragOver(event) {
 
 .nav-button {
     margin-top: auto;
+}
+
+.clipboard-paste-target {
+    position: fixed;
+    width: 1px;
+    height: 1px;
+    left: -100px;
+    bottom: -100px;
+    opacity: 0;
+    pointer-events: none;
 }
 
 .copy-success-message {

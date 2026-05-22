@@ -158,11 +158,56 @@ jobs:
           path: release-assets/*.zip
           if-no-files-found: error
 
+  build-msix:
+    name: Build MSIX windows-latest x64
+    needs: prepare
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.is_tag == 'true' && needs.prepare.outputs.build_sha || github.ref }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'yarn'
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Build MSIX package
+        run: yarn electron:build:msix
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - name: Collect MSIX package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force release-assets | Out-Null
+
+          $msixFiles = Get-ChildItem -Path dist_electron -Filter *.msix -File
+          if ($msixFiles.Count -eq 0) {
+            throw "No MSIX package found."
+          }
+
+          Copy-Item -Path $msixFiles.FullName -Destination release-assets -Force
+
+      - name: Upload MSIX artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-msix-windows-latest-x64
+          path: release-assets/*.msix
+          if-no-files-found: error
+
   release:
     name: Publish GitHub Release
     needs:
       - prepare
       - build
+      - build-msix
     if: ${{ startsWith(github.ref, 'refs/tags/') }}
     runs-on: ubuntu-latest
     permissions:
@@ -187,7 +232,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG_NAME: ${{ github.ref_name }}
         run: |
-          mapfile -t assets < <(find release-assets -type f -name '*.zip' | sort)
+          mapfile -t assets < <(find release-assets -type f \( -name '*.zip' -o -name '*.msix' \) | sort)
 
           if [ "${#assets[@]}" -eq 0 ]; then
             echo "::error::No release assets found."
