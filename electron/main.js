@@ -11,6 +11,8 @@ const __dirname = path.dirname(__filename);
 const store = new Store();
 // 开发环境标识
 const NODE_ENV = process.env.NODE_ENV;
+const isMacOS = process.platform === 'darwin';
+const isWindows = process.platform === 'win32';
 // 实例检查
 const gotTheLock = app.requestSingleInstanceLock();
 
@@ -167,6 +169,11 @@ function createWindow() {
     resizable: true,
     frame: false, // 窗口框架
     transparent: true, // 窗口背景透明
+    ...(isMacOS ? {
+      vibrancy: 'under-window',
+      visualEffectState: 'active',
+      backgroundColor: '#00000000',
+    } : {}),
     webPreferences: {
       webSecurity: true,
       preload: path.join(__dirname, 'preload.cjs'),
@@ -302,7 +309,9 @@ function createWindow() {
 
   // 设置背景材质
   // 已知问题：窗口关闭再打开，背景材质应用失效。
-  mainWindow.setBackgroundMaterial('acrylic');
+  if (isWindows) {
+    mainWindow.setBackgroundMaterial('acrylic');
+  }
 
   mainWindow.show();
 }
@@ -385,7 +394,9 @@ if (!gotTheLock) {
 
     // 双击托盘图标打开应用
     tray.on('click', () => {
-      mainWindow.setBackgroundMaterial('acrylic');
+      if (isWindows) {
+        mainWindow.setBackgroundMaterial('acrylic');
+      }
       mainWindow.show();
     });
 
