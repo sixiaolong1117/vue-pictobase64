@@ -53,6 +53,7 @@
       ]
     },
     "mac": {
+      "icon": "icon/icon.icns",
       "category": "public.app-category.utilities"
     },
     "linux": {
@@ -70,10 +71,10 @@
       "dist/**/*",
       "electron/**/*"
     ],
-    "extraFiles": [
+    "extraResources": [
       {
         "from": "src/assets/icon",
-        "to": "resources",
+        "to": ".",
         "filter": [
           "**/*"
         ]

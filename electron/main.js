@@ -155,6 +155,12 @@ function findClipboardImageFilePath() {
   });
 }
 
+function getAppIconPath(fileName = 'icon.png') {
+  return NODE_ENV === 'development'
+    ? path.join(__dirname, '../src/assets/icon', fileName)
+    : path.join(process.resourcesPath, fileName);
+}
+
 // 全局作用域
 let tray;
 let mainWindow;
@@ -169,6 +175,7 @@ function createWindow() {
     resizable: true,
     frame: false, // 窗口框架
     transparent: true, // 窗口背景透明
+    icon: getAppIconPath(),
     ...(isMacOS ? {
       vibrancy: 'under-window',
       visualEffectState: 'active',
@@ -330,12 +337,12 @@ if (!gotTheLock) {
   });
   app.whenReady().then(() => {
     // 托盘图标路径
-    const imgPath =
-      NODE_ENV === 'development'
-        ? './src/assets/icon/icon.png'
-        : path.join(process.resourcesPath, 'icon.png');
+    const imgPath = getAppIconPath();
 
     tray = new Tray(imgPath);
+    if (isMacOS && app.dock) {
+      app.dock.setIcon(imgPath);
+    }
 
     createWindow();
 
