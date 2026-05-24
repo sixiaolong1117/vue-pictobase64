@@ -1,6 +1,6 @@
 {
   "name": "vue-pictobase64",
-  "version": "2.1.2",
+  "version": "2.1.3",
   "description": "Pic to Base64 desktop client built with Vue and Electron.",
   "author": "SI Xiaolong",
   "main": "electron/main.js",
