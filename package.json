@@ -57,6 +57,7 @@
       "category": "public.app-category.utilities"
     },
     "linux": {
+      "icon": "icon/icon.png",
       "target": [
         "AppImage",
         "tar.gz"
@@ -76,7 +77,10 @@
         "from": "src/assets/icon",
         "to": ".",
         "filter": [
-          "**/*"
+          "**/*",
+          "!icon.icns",
+          "!icon.ico",
+          "!icon.png"
         ]
       }
     ],
