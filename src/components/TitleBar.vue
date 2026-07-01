@@ -30,9 +30,14 @@ const useMarkdown = ref(false);
 
 // 初始化变量
 async function initializeSettings() {
-  minimizeToTray.value = (await getStoreValue('minimizeToTray')) ?? false;
-  autoCopy.value = (await getStoreValue('autoCopy')) ?? false;
-  useMarkdown.value = (await getStoreValue('useMarkdown')) ?? false;
+  const [minimizeToTrayVal, autoCopyVal, useMarkdownVal] = await Promise.all([
+    getStoreValue('minimizeToTray'),
+    getStoreValue('autoCopy'),
+    getStoreValue('useMarkdown')
+  ]);
+  minimizeToTray.value = minimizeToTrayVal ?? false;
+  autoCopy.value = autoCopyVal ?? false;
+  useMarkdown.value = useMarkdownVal ?? false;
 }
 
 // 调用初始化

@@ -15,9 +15,7 @@
     "electron:build:msix": "vite build && electron-builder --win appx --x64 --publish never"
   },
   "dependencies": {
-    "@element-plus/icons-vue": "^2.3.1",
     "@fortawesome/fontawesome-svg-core": "^6.7.2",
-    "@fortawesome/free-brands-svg-icons": "^6.7.2",
     "@fortawesome/free-solid-svg-icons": "^6.7.2",
     "@fortawesome/vue-fontawesome": "^3.0.8",
     "electron-store": "^10.0.0",
