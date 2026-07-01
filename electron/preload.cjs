@@ -24,7 +24,7 @@ const ALLOWED_SEND_CHANNELS = [
 ];
 
 // 可查询的 Store key 白名单
-const ALLOWED_STORE_KEYS = ['minimizeToTray', 'autoCopy', 'useMarkdown', 'alwaysOnTop'];
+const ALLOWED_STORE_KEYS = ['minimizeToTray', 'autoCopy', 'useMarkdown', 'alwaysOnTop', 'maxLongEdge', 'outputFormat', 'imageQuality'];
 
 // 安全的 Store key 校验
 function assertStoreKey(key) {

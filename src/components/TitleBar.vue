@@ -27,17 +27,37 @@ async function setStoreValue(key, value) {
 const minimizeToTray = ref(false);
 const autoCopy = ref(false);
 const useMarkdown = ref(false);
+const maxLongEdge = ref(720);
+const outputFormat = ref('image/jpeg');
+const imageQuality = ref(85);
+
+const DEFAULTS = { maxLongEdge: 720, outputFormat: 'image/jpeg', imageQuality: 85 };
+
+function resetPreprocess() {
+  maxLongEdge.value = DEFAULTS.maxLongEdge;
+  outputFormat.value = DEFAULTS.outputFormat;
+  imageQuality.value = DEFAULTS.imageQuality;
+  updateStore('maxLongEdge', DEFAULTS.maxLongEdge);
+  updateStore('outputFormat', DEFAULTS.outputFormat);
+  updateStore('imageQuality', DEFAULTS.imageQuality);
+}
 
 // 初始化变量
 async function initializeSettings() {
-  const [minimizeToTrayVal, autoCopyVal, useMarkdownVal] = await Promise.all([
+  const [minimizeToTrayVal, autoCopyVal, useMarkdownVal, maxLongEdgeVal, outputFormatVal, imageQualityVal] = await Promise.all([
     getStoreValue('minimizeToTray'),
     getStoreValue('autoCopy'),
-    getStoreValue('useMarkdown')
+    getStoreValue('useMarkdown'),
+    getStoreValue('maxLongEdge'),
+    getStoreValue('outputFormat'),
+    getStoreValue('imageQuality')
   ]);
   minimizeToTray.value = minimizeToTrayVal ?? false;
   autoCopy.value = autoCopyVal ?? false;
   useMarkdown.value = useMarkdownVal ?? false;
+  maxLongEdge.value = maxLongEdgeVal ?? 720;
+  outputFormat.value = outputFormatVal ?? 'image/jpeg';
+  imageQuality.value = imageQualityVal ?? 85;
 }
 
 // 调用初始化
@@ -226,6 +246,34 @@ async function fetchContent() {
                         @update:modelValue="(value) => updateStore('useMarkdown', value)"
                         style="--el-switch-on-color: #13ce66; --el-switch-off-color: #ff4949" inline-prompt
                         active-text="是" inactive-text="否" />
+                </div>
+                <hr>
+                <div class="dialog-header-text" style="margin-top: .5em;"><b>图片预处理</b></div>
+                <div class="row-div dialog-inner-text" style="margin-top: .5em;">
+                    <div class="dialog-header-text">最大边长（像素）：</div>
+                    <el-input-number v-model="maxLongEdge" :min="0" :max="8000" :step="100"
+                        @update:modelValue="(value) => updateStore('maxLongEdge', value)"
+                        size="small" style="margin-left: auto;" />
+                </div>
+                <div class="row-div dialog-inner-text">
+                    <div class="dialog-header-text">输出格式：</div>
+                    <el-select v-model="outputFormat"
+                        @update:modelValue="(value) => updateStore('outputFormat', value)"
+                        size="small" style="margin-left: auto; width: 10em;">
+                        <el-option label="JPEG" value="image/jpeg" />
+                        <el-option label="PNG" value="image/png" />
+                        <el-option label="WebP" value="image/webp" />
+                        <el-option label="原始格式" value="original" />
+                    </el-select>
+                </div>
+                <div class="row-div dialog-inner-text" v-if="outputFormat === 'image/jpeg' || outputFormat === 'image/webp'">
+                    <div class="dialog-header-text">质量：</div>
+                    <el-slider v-model="imageQuality" :min="10" :max="100" :step="1"
+                        @update:modelValue="(value) => updateStore('imageQuality', value)"
+                        size="small" style="margin-left: auto; width: 10em;" />
+                </div>
+                <div style="text-align: center; margin-top: 1em;">
+                    <el-button size="small" @click="resetPreprocess">恢复默认</el-button>
                 </div>
             </div>
         </el-dialog>

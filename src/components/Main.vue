@@ -10,8 +10,6 @@ const clipboardPasteTargetRef = ref(null)
 let clipboardPasteTimer = null
 let clipboardPasteRequested = false
 
-// 文件大小上限：10MB
-const MAX_FILE_SIZE = 10 * 1024 * 1024
 const IMAGE_FILE_EXTENSION_PATTERN = /\.(png|jpe?g|gif|webp|bmp|svg|ico)$/i
 
 // 监听主进程发送的事件（通过 preload API）
@@ -33,6 +31,63 @@ async function getStoreValue(key) {
   return await window.electronAPI.invoke('get-store', key)
 }
 
+async function getSettings() {
+  const [maxLongEdge, outputFormat, imageQuality] = await Promise.all([
+    getStoreValue('maxLongEdge'),
+    getStoreValue('outputFormat'),
+    getStoreValue('imageQuality')
+  ])
+  return {
+    maxLongEdge: maxLongEdge ?? 720,
+    outputFormat: outputFormat ?? 'image/jpeg',
+    imageQuality: imageQuality ?? 85
+  }
+}
+
+function calcDimensions(naturalWidth, naturalHeight, maxEdge) {
+  const longEdge = Math.max(naturalWidth, naturalHeight)
+  if (longEdge <= maxEdge) return { width: naturalWidth, height: naturalHeight }
+  const ratio = maxEdge / longEdge
+  return {
+    width: Math.round(naturalWidth * ratio),
+    height: Math.round(naturalHeight * ratio)
+  }
+}
+
+// 图片预处理：元数据剥离 + 缩放 + 格式转换
+async function preprocessImage(dataUrl, mimeType) {
+  const settings = await getSettings()
+  if (settings.maxLongEdge === 0) return dataUrl
+  if (mimeType === 'image/svg+xml' || mimeType === 'image/gif') return dataUrl
+
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.onload = () => {
+      const longEdge = Math.max(img.naturalWidth, img.naturalHeight)
+      if (longEdge <= settings.maxLongEdge && settings.outputFormat === 'original') {
+        resolve(dataUrl)
+        return
+      }
+
+      const { width, height } = calcDimensions(img.naturalWidth, img.naturalHeight, settings.maxLongEdge)
+      const canvas = document.createElement('canvas')
+      canvas.width = width
+      canvas.height = height
+      const ctx = canvas.getContext('2d')
+
+      if (settings.outputFormat === 'image/jpeg') {
+        ctx.fillStyle = '#FFFFFF'
+        ctx.fillRect(0, 0, width, height)
+      }
+
+      ctx.drawImage(img, 0, 0, width, height)
+      resolve(canvas.toDataURL(settings.outputFormat, settings.imageQuality / 100))
+    }
+    img.onerror = () => reject(new Error('图片加载失败'))
+    img.src = dataUrl
+  })
+}
+
 async function applyImageDataUrl(dataUrl) {
   previewSrc.value = dataUrl
   base64code.value = dataUrl
@@ -41,11 +96,6 @@ async function applyImageDataUrl(dataUrl) {
   if (autoCopy === true) {
     copyCode()
   }
-}
-
-function showImageFileSizeWarning(size) {
-  const sizeMB = (size / (1024 * 1024)).toFixed(1)
-  ElMessage.warning(`文件大小 ${sizeMB}MB 超过 10MB 上限，请选择更小的图片`)
 }
 
 function clearClipboardPasteTimer() {
@@ -82,12 +132,8 @@ async function loadImageFilePath(filePath, errorPrefix = '读取图片失败') {
     return false
   }
 
-  if (result.size > MAX_FILE_SIZE) {
-    showImageFileSizeWarning(result.size)
-    return true
-  }
-
-  await applyImageDataUrl(result.dataUrl)
+  const processed = await preprocessImage(result.dataUrl, result.mimeType || 'image/png')
+  await applyImageDataUrl(processed)
   return true
 }
 
@@ -147,12 +193,8 @@ async function readClipboardImageFile(showError = true) {
     return true
   }
 
-  if (result.size > MAX_FILE_SIZE) {
-    showImageFileSizeWarning(result.size)
-    return true
-  }
-
-  await applyImageDataUrl(result.dataUrl)
+  const processed = await preprocessImage(result.dataUrl, result.mimeType || 'image/png')
+  await applyImageDataUrl(processed)
   return true
 }
 
@@ -206,17 +248,12 @@ function processImageFile(file) {
     return
   }
 
-  // 大小检查
-  if (file.size > MAX_FILE_SIZE) {
-    showImageFileSizeWarning(file.size)
-    return
-  }
-
   // 创建 FileReader 对象
   const reader = new FileReader()
 
   reader.addEventListener('load', async function () {
-    await applyImageDataUrl(this.result)
+    const processed = await preprocessImage(this.result, file.type || 'image/png')
+    await applyImageDataUrl(processed)
   }, false)
 
   reader.addEventListener('error', async function () {

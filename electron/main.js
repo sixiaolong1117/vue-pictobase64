@@ -17,7 +17,7 @@ const isWindows = process.platform === 'win32';
 const gotTheLock = app.requestSingleInstanceLock();
 
 // Store key 白名单
-const VALID_STORE_KEYS = ['minimizeToTray', 'autoCopy', 'useMarkdown'];
+const VALID_STORE_KEYS = ['minimizeToTray', 'autoCopy', 'useMarkdown', 'maxLongEdge', 'outputFormat', 'imageQuality'];
 function isValidStoreKey(key) {
   return VALID_STORE_KEYS.includes(key);
 }
