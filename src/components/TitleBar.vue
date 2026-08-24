@@ -1,5 +1,12 @@
 <script setup>
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
+
+// macOS 检测：仅影响样式与窗口按钮显隐，不改 Windows/Linux 逻辑
+const isMacOS = computed(() => {
+  const p = navigator.platform || '';
+  const ua = navigator.userAgent || '';
+  return /Mac|iPhone|iPad|iPod/i.test(p) || ua.includes('Mac');
+});
 
 // 通过 preload 暴露的 API 获取版本信息
 const version = ref('');
@@ -130,8 +137,8 @@ async function fetchContent() {
 </script>
 
 <template>
-    <!-- 标题栏 -->
-    <div id="title-bar">
+    <!-- 标题栏：macOS 下 hiddenInset 保留系统红黄绿，自定义最小化/关闭自动隐藏以避免重复 -->
+    <div id="title-bar" :class="{ 'is-macos': isMacOS }">
         <div class="title"><b>ℙ𝕚𝕔 𝕋𝕠 𝔹𝕒𝕤𝕖𝟞𝟜</b></div>
         <div class="bar">
             <el-button class="bar-button mini-button" @click="openAbout()">
@@ -140,10 +147,10 @@ async function fetchContent() {
             <el-button class="bar-button mini-button" @click="openSettings()">
                 <font-awesome-icon :icon="['fas', 'gear']" size="1x" />
             </el-button>
-            <el-button class="bar-button mini-button" @click="minimizeFrame()">
+            <el-button v-if="!isMacOS" class="bar-button mini-button" @click="minimizeFrame()">
                 <font-awesome-icon :icon="['fas', 'minus']" size="1x" />
             </el-button>
-            <el-button class="bar-button close-button" @click="closeFrame()">
+            <el-button v-if="!isMacOS" class="bar-button close-button" @click="closeFrame()">
                 <font-awesome-icon :icon="['fas', 'xmark']" size="1x" />
             </el-button>
         </div>
@@ -226,12 +233,15 @@ async function fetchContent() {
             :destroy-on-close="true">
             <div class="dialog-back">
                 <div id="dialog-title"><b>设置</b></div>
-                <div class="row-div dialog-inner-text" style="margin-top: .5em;">
+                <div v-if="!isMacOS" class="row-div dialog-inner-text" style="margin-top: .5em;">
                     <div class="dialog-header-text">点击关闭按钮最小化到托盘：</div>
                     <el-switch class="dialog-switch" v-model="minimizeToTray"
                         @update:modelValue="(value) => updateStore('minimizeToTray', value)"
                         style="--el-switch-on-color: #13ce66; --el-switch-off-color: #ff4949" inline-prompt
                         active-text="是" inactive-text="否" />
+                </div>
+                <div v-else class="row-div dialog-inner-text" style="margin-top: .5em;">
+                    <div class="dialog-header-text" style="opacity:.6">关闭窗口后应用保留在 Dock（符合 macOS 习惯）</div>
                 </div>
                 <div class="row-div dialog-inner-text">
                     <div class="dialog-header-text">转换后自动复制：</div>
@@ -421,6 +431,14 @@ a:hover {
     -webkit-app-region: drag;
     display: flex;
     flex-direction: column;
+}
+#title-bar.is-macos {
+    /* hiddenInset 交通灯占位约 78px，避免标题被遮挡；同时保留拖动 */
+    padding-left: 78px;
+    min-height: 28px;
+}
+#title-bar.is-macos .title {
+    margin-left: 0;
 }
 
 .bar {

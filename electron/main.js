@@ -16,8 +16,8 @@ const isWindows = process.platform === 'win32';
 // 实例检查
 const gotTheLock = app.requestSingleInstanceLock();
 
-// Store key 白名单
-const VALID_STORE_KEYS = ['minimizeToTray', 'autoCopy', 'useMarkdown', 'maxLongEdge', 'outputFormat', 'imageQuality'];
+// Store key 白名单（与 preload.cjs 的 ALLOWED_STORE_KEYS 保持一致，macOS 保留 alwaysOnTop 占位）
+const VALID_STORE_KEYS = ['minimizeToTray', 'autoCopy', 'useMarkdown', 'maxLongEdge', 'outputFormat', 'imageQuality', 'alwaysOnTop'];
 function isValidStoreKey(key) {
   return VALID_STORE_KEYS.includes(key);
 }
@@ -156,9 +156,63 @@ function findClipboardImageFilePath() {
 }
 
 function getAppIconPath(fileName = 'icon.png') {
-  return NODE_ENV === 'development'
-    ? path.join(__dirname, '../src/assets/icon', fileName)
-    : path.join(process.resourcesPath, fileName);
+  if (NODE_ENV === 'development') {
+    return path.join(__dirname, '../src/assets/icon', fileName);
+  }
+  // 生产环境：优先取 resources 根目录，macOS 额外兼容 icns
+  const candidates = [
+    path.join(process.resourcesPath, fileName),
+    path.join(process.resourcesPath, 'icon.png'),
+    path.join(process.resourcesPath, 'icon.icns'),
+    path.join(__dirname, '../src/assets/icon', fileName),
+  ];
+  for (const p of candidates) {
+    try { if (fs.existsSync(p)) return p; } catch {}
+  }
+  return path.join(process.resourcesPath, fileName);
+}
+
+function buildMacAppMenu() {
+  const template = [
+    {
+      label: app.name,
+      submenu: [
+        { role: 'about' },
+        { type: 'separator' },
+        { role: 'services' },
+        { type: 'separator' },
+        { role: 'hide' },
+        { role: 'hideOthers' },
+        { role: 'unhide' },
+        { type: 'separator' },
+        { role: 'quit' },
+      ],
+    },
+    {
+      label: 'Edit',
+      submenu: [
+        { role: 'undo' },
+        { role: 'redo' },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        { role: 'selectAll' },
+      ],
+    },
+    {
+      label: 'Window',
+      submenu: [
+        { role: 'minimize' },
+        { role: 'zoom' },
+        { type: 'separator' },
+        { role: 'front' },
+        { role: 'close' },
+      ],
+    },
+  ];
+  const menu = Menu.buildFromTemplate(template);
+  Menu.setApplicationMenu(menu);
 }
 
 // 全局作用域
@@ -173,14 +227,21 @@ function createWindow() {
     minWidth: 400,
     minHeight: 400,
     resizable: true,
-    frame: false, // 窗口框架
-    transparent: true, // 窗口背景透明
     icon: getAppIconPath(),
+    // 平台差异：macOS 用 hiddenInset 保留红黄绿交通灯 + vibrancy；Win/Linux 保持无边框透明
     ...(isMacOS ? {
-      vibrancy: 'under-window',
+      titleBarStyle: 'hiddenInset',
+      trafficLightPosition: { x: 12, y: 12 },
+      vibrancy: 'sidebar',
       visualEffectState: 'active',
       backgroundColor: '#00000000',
-    } : {}),
+      hasShadow: true,
+      roundedCorners: true,
+      // transparent 保持 false，vibrancy 性能更好且阴影正常
+    } : {
+      frame: false,
+      transparent: true,
+    }),
     webPreferences: {
       webSecurity: true,
       preload: path.join(__dirname, 'preload.cjs'),
@@ -346,8 +407,12 @@ if (!gotTheLock) {
 
     createWindow();
 
-    // 隐藏菜单栏
-    Menu.setApplicationMenu(null);
+    // 菜单：macOS 保留最小原生菜单（Cmd+Q/H 等），Win/Linux 隐藏
+    if (isMacOS) {
+      buildMacAppMenu();
+    } else {
+      Menu.setApplicationMenu(null);
+    }
 
     const contextMenu = Menu.buildFromTemplate([
       {
@@ -397,10 +462,20 @@ if (!gotTheLock) {
     tray.setContextMenu(contextMenu);
 
     tray.setToolTip('Pic To Base64');
-    tray.setTitle('Pic To Base64');
+    // macOS 菜单栏不写文字，保持简洁
+    if (!isMacOS) {
+      tray.setTitle('Pic To Base64');
+    }
 
-    // 双击托盘图标打开应用
+    // 托盘点击：Win/Linux 直接显示窗口；macOS 以右键菜单为主
     tray.on('click', () => {
+      if (isMacOS) {
+        // macOS 单击仅在窗口不可见时显示，避免覆盖右键菜单习惯
+        if (mainWindow && !mainWindow.isVisible()) {
+          mainWindow.show();
+        }
+        return;
+      }
       if (isWindows) {
         mainWindow.setBackgroundMaterial('acrylic');
       }

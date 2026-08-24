@@ -51,6 +51,13 @@ body {
   background-color: rgba(0, 0, 0, 0.4);
   /* -webkit-app-region: drag; */
 }
+/* macOS sidebar vibrancy 在浅色外观下避免过暗，保持与系统一致 */
+@media (prefers-color-scheme: light) {
+  html,
+  body {
+    background-color: rgba(255, 255, 255, 0.15);
+  }
+}
 
 h2,
 h3,
